@@ -82,12 +82,12 @@ const questions = [
   {
     question: "What is the total supply of EDGEN?",
     options: ["A. 100 million", "B. 500 million", "C. 1 billion", "D. 10 billion"],
-    correct: 1
+    correct: 2
   },
   {
     question: "The majority of the EDGEN supply is allocated to which group?",
     options: ["A. Core Contributors", "B. Early Backers", "C. Foundation", "D. Community"],
-    correct: 2
+    correct: 3
   },
   {
     question: "What percentage of the EDGEN token supply is allocated to the Community?",
@@ -97,12 +97,12 @@ const questions = [
   {
     question: "Which group is the only one to have an initial token unlock at TGE (Token Generation Event)?",
     options: ["A. Core Contributors", "B. Early Backers", "C. Foundation", "D. Community"],
-    correct: 1
+    correct: 3
   },
   {
     question: "How will Airdrop I be unlocked at TGE?",
     options: ["A. 10% unlocked, 90% vesting over 12 months", "B. 50% unlocked, 50% vesting over 6 months", "C. 100% unlocked with no vesting", "D. 25% unlocked, vesting over 36 months"],
-    correct: 1
+    correct: 2
   },
   {
     question: "What is the cliff and vesting schedule for Core Contributors?",
@@ -112,22 +112,22 @@ const questions = [
   {
     question: "What is the vesting schedule for Early Backers?",
     options: ["A. 12 months cliff + 15 months vesting", "B. 3 months cliff + 12 months vesting", "C. 6 months cliff + 24 months vesting", "D. No cliff, 36 months vesting"],
-    correct: 1
+    correct: 0
   },
   {
     question: "What percentage of the token supply is allocated to the Foundation?",
     options: ["A. 5%", "B. 15%", "C. 12%", "D. 10%"],
-    correct: 1
+    correct: 2
   },
   {
     question: "What is the cliff period for the Foundation?",
     options: ["A. 12 months", "B. 6 months", "C. 0 months", "D. 3 months"],
-    correct: 1
+    correct: 3
   },
   {
     question: "How long will the Ecosystem & R&D allocation be vested?",
     options: ["A. 12 months", "B. 36 months", "C. 48 months", "D. 24 months"],
-    correct: 1
+    correct: 2
   }
 ];
 
@@ -364,7 +364,7 @@ function gameLoop() {
     }
 
     if (!hasIncorrect) {
-      ctx.fillText("Chúc mừng! Bạn trả lời đúng hết!", width / 2, yOffset);
+      ctx.fillText("Congratulations, you answered everything correctly!", width / 2, yOffset);
       yOffset += 40; // Tăng yOffset để tạo khoảng trống cho nút Restart
     }
 
