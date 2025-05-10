@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Edgen Quiz Game</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      max-width: 800px;
+      max-height: 700px; /* Tăng max-height từ 600 lên 700 để mở rộng chiều dọc */
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const dpr = window.devicePixelRatio || 1;
+const maxWidth = 800;
+const maxHeight = 800; // Tăng maxHeight để có thêm không gian theo chiều dọc
+canvas.width = Math.min(window.innerWidth, maxWidth) * dpr;
+canvas.height = Math.min(window.innerHeight, maxHeight) * dpr;
+canvas.style.width = canvas.width / dpr + "px";
+canvas.style.height = canvas.height / dpr + "px";
+ctx.scale(dpr, dpr);
+const width = canvas.width / dpr;
+const height = canvas.height / dpr;
+
+// Load background image
+const backgroundImage = new Image();
+backgroundImage.src = "assets/background.png";
+// Load background music
+const backgroundMusic = new Audio("assets/little-slimex27s-adventure-151007.mp3");
+backgroundMusic.loop = true; // Lặp lại nhạc liên tục
+
+// Phát nhạc sau khi ảnh nền tải xong và người dùng tương tác
+backgroundImage.onload = () => {
+  gameLoop();
+  // Phát nhạc ngay khi game bắt đầu (có thể cần tương tác người dùng)
+  // Nếu trình duyệt yêu cầu tương tác, nhạc sẽ phát sau lần nhấp đầu tiên
+  backgroundMusic.play().catch(error => {
+    console.log("Autoplay bị chặn, cần tương tác để phát nhạc: ", error);
+  });
+};
+
+// Phát nhạc khi người dùng tương tác lần đầu (để đảm bảo tương thích với chính sách autoplay)
+canvas.addEventListener('click', () => {
+  if (backgroundMusic.paused) {
+    backgroundMusic.play().catch(error => {
+      console.log("Lỗi khi phát nhạc: ", error);
+    });
+  }
+}, { once: true }); // Chỉ chạy một lần sau lần nhấp đầu tiên
+
+let currentQuestion = 0;
+let score = 0;
+let gameState = 'playing';
+let selectedAnswer = null;
+let selectedOptionText = '';
+let feedbackTimer = 0;
+let timeLeft = 10;
+let timerRunning = true;
+let particles = [];
+const answers = Array(10).fill(null);
+
+const questions = [
+  {
+    question: "What is the total supply of EDGEN?",
+    options: ["A. 100 million", "B. 500 million", "C. 1 billion", "D. 10 billion"],
+    correct: 1
+  },
+  {
+    question: "The majority of the EDGEN supply is allocated to which group?",
+    options: ["A. Core Contributors", "B. Early Backers", "C. Foundation", "D. Community"],
+    correct: 2
+  },
+  {
+    question: "What percentage of the EDGEN token supply is allocated to the Community?",
+    options: ["A. 22%", "B. 46%", "C. 15%", "D. 12%"],
+    correct: 1
+  },
+  {
+    question: "Which group is the only one to have an initial token unlock at TGE (Token Generation Event)?",
+    options: ["A. Core Contributors", "B. Early Backers", "C. Foundation", "D. Community"],
+    correct: 1
+  },
+  {
+    question: "How will Airdrop I be unlocked at TGE?",
+    options: ["A. 10% unlocked, 90% vesting over 12 months", "B. 50% unlocked, 50% vesting over 6 months", "C. 100% unlocked with no vesting", "D. 25% unlocked, vesting over 36 months"],
+    correct: 1
+  },
+  {
+    question: "What is the cliff and vesting schedule for Core Contributors?",
+    options: ["A. 6 months cliff + 24 months vesting", "B. 12 months cliff + 48 months vesting", "C. 3 months cliff + 36 months vesting", "D. No cliff, 48 months vesting"],
+    correct: 1
+  },
+  {
+    question: "What is the vesting schedule for Early Backers?",
+    options: ["A. 12 months cliff + 15 months vesting", "B. 3 months cliff + 12 months vesting", "C. 6 months cliff + 24 months vesting", "D. No cliff, 36 months vesting"],
+    correct: 1
+  },
+  {
+    question: "What percentage of the token supply is allocated to the Foundation?",
+    options: ["A. 5%", "B. 15%", "C. 12%", "D. 10%"],
+    correct: 1
+  },
+  {
+    question: "What is the cliff period for the Foundation?",
+    options: ["A. 12 months", "B. 6 months", "C. 0 months", "D. 3 months"],
+    correct: 1
+  },
+  {
+    question: "How long will the Ecosystem & R&D allocation be vested?",
+    options: ["A. 12 months", "B. 36 months", "C. 48 months", "D. 24 months"],
+    correct: 1
+  }
+];
+
+const buttonWidth = width * 0.8;
+const buttonHeight = 60;
+const buttonSpacing = 20;
+const buttons = Array(4).fill().map((_, i) => ({
+  x: (width - buttonWidth) / 2,
+  y: height * 0.4 + i * (buttonHeight + buttonSpacing),
+  width: buttonWidth,
+  height: buttonHeight,
+  hover: false
+}));
+
+const navButtonWidth = width * 0.3;
+const navButtonHeight = 40;
+const backBtn = {
+  x: (width - navButtonWidth * 2 - 20) / 2,
+  y: height * 0.86, // Điều chỉnh vị trí y từ 0.85 xuống 0.9 để nút thấp hơn
+  width: navButtonWidth,
+  height: navButtonHeight,
+  hover: false
+};
+const nextBtn = {
+  x: backBtn.x + navButtonWidth + 20,
+  y: height * 0.86, // Điều chỉnh vị trí y từ 0.85 xuống 0.9 để nút thấp hơn
+  width: navButtonWidth,
+  height: navButtonHeight,
+  hover: false
+};
+
+// Tạo nút Restart
+const restartBtn = {
+  x: (width - navButtonWidth) / 2, // Căn giữa nút
+  y: height * 0.2, // Đặt ở dưới phần thông báo kết quả
+  width: navButtonWidth,
+  height: navButtonHeight,
+  hover: false
+};
+
+class Particle {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = Math.random() * 5 + 2;
+    this.speedX = Math.random() * 2 - 1;
+    this.speedY = Math.random() * 2 - 1;
+    this.life = 1;
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    this.life -= 0.02;
+  }
+  draw() {
+    ctx.fillStyle = `rgba(255, 215, 0, ${this.life})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function wrapText(text, maxWidth) {
+  const words = text.split(" ");
+  const lines = [];
+  let currentLine = words[0];
+  for (let i = 1; i < words.length; i++) {
+    const testLine = currentLine + " " + words[i];
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth) {
+      lines.push(currentLine);
+      currentLine = words[i];
+    } else {
+      currentLine = testLine;
+    }
+  }
+  lines.push(currentLine);
+  return lines;
+}
+
+function drawButton(btn, text, index) {
+  ctx.save();
+  ctx.fillStyle = btn.hover ? '#a1c4fd' : '#ffffff';
+  if (selectedAnswer === index) {
+    ctx.fillStyle = '#b3ffb3';
+  }
+  ctx.beginPath();
+  ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 10);
+  ctx.fill();
+  ctx.strokeStyle = '#444';
+  ctx.stroke();
+  ctx.fillStyle = '#333';
+  ctx.font = '20px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, btn.x + btn.width / 2, btn.y + btn.height / 2);
+  ctx.restore();
+}
+
+function drawNavButton(btn, text) {
+  ctx.save();
+  ctx.fillStyle = btn.hover ? '#a1c4fd' : '#d3cce3';
+  ctx.beginPath();
+  ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 10);
+  ctx.fill();
+  ctx.strokeStyle = '#333';
+  ctx.stroke();
+  ctx.fillStyle = '#333';
+  ctx.font = '18px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, btn.x + btn.width / 2, btn.y + btn.height / 2);
+  ctx.restore();
+}
+
+function calculateScore() {
+  let totalScore = 0;
+  for (let i = 0; i < questions.length; i++) {
+    if (answers[i] !== null && answers[i] === questions[i].correct) {
+      totalScore += 10;
+    }
+  }
+  return totalScore;
+}
+
+function resetGame() {
+  currentQuestion = 0;
+  score = 0;
+  gameState = 'playing';
+  selectedAnswer = null;
+  selectedOptionText = '';
+  feedbackTimer = 0;
+  timeLeft = 10;
+  timerRunning = true;
+  particles = [];
+  for (let i = 0; i < answers.length; i++) {
+    answers[i] = null;
+  }
+}
+
+function gameLoop() {
+  ctx.drawImage(backgroundImage, 0, 0, width, height);
+
+  if (gameState === 'playing' || gameState === 'feedback') {
+    ctx.fillStyle = '#333';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Question ${currentQuestion + 1}/${questions.length}`, width / 2, 30);
+    ctx.fillStyle = '#8B4513'; // Màu nâu cho câu hỏi
+    ctx.font = 'bold 24px Arial'; // In đậm câu hỏi
+    const lines = wrapText(questions[currentQuestion].question, width * 0.8);
+    lines.forEach((line, i) => {
+      ctx.fillText(line, width / 2, height * 0.2 + i * 30);
+    });
+
+    if (gameState === 'feedback' && selectedAnswer !== null) {
+      ctx.fillStyle = '#555';
+      ctx.font = '18px Arial';
+      ctx.fillText(`You have chosen: ${selectedOptionText}`, width / 2, height * 0.3);
+    }
+
+    buttons.forEach((btn, i) => {
+      drawButton(btn, questions[currentQuestion].options[i], i);
+    });
+
+    drawNavButton(backBtn, 'BACK');
+    drawNavButton(nextBtn, 'NEXT');
+
+    if (gameState === 'feedback') {
+      feedbackTimer--;
+      if (feedbackTimer <= 0) {
+        if (currentQuestion < questions.length - 1) {
+          currentQuestion++;
+          selectedAnswer = answers[currentQuestion];
+          selectedOptionText = selectedAnswer !== null ? questions[currentQuestion].options[selectedAnswer] : '';
+          gameState = 'playing';
+          timeLeft = 10;
+          timerRunning = true;
+        } else {
+          gameState = 'end';
+        }
+      }
+    }
+
+    if (gameState === 'feedback' && selectedAnswer === questions[currentQuestion].correct) {
+      const btn = buttons[selectedAnswer];
+      for (let i = 0; i < 2; i++) {
+        particles.push(new Particle(btn.x + btn.width / 2, btn.y + btn.height / 2));
+      }
+    }
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => {
+      p.update();
+      p.draw();
+    });
+  } else if (gameState === 'end') {
+    score = calculateScore();
+
+    ctx.fillStyle = '#333';
+    ctx.font = '30px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎉 You are done', width / 2, height / 2 - 60);
+    ctx.font = '24px Arial';
+    ctx.fillText(`Your score: ${score}/100`, width / 2, height / 2 - 100);
+
+    let yOffset = height / 2;
+    ctx.font = '18px Arial';
+    ctx.fillStyle = '#555';
+    let hasIncorrect = false;
+
+    for (let i = 0; i < questions.length; i++) {
+      if (answers[i] !== null && answers[i] !== questions[i].correct) {
+        hasIncorrect = true;
+        const questionText = `Question ${i + 1}: ${questions[i].question}`;
+        const userAnswer = `You chose: ${questions[i].options[answers[i]]}`;
+        const correctAnswer = `Correct answer: ${questions[i].options[questions[i].correct]}`;
+        const wrappedQuestion = wrapText(questionText, width * 0.9);
+        const wrappedUserAnswer = wrapText(userAnswer, width * 0.9);
+        const wrappedCorrectAnswer = wrapText(correctAnswer, width * 0.9);
+
+        wrappedQuestion.forEach((line, j) => {
+          ctx.fillText(line, width / 2, yOffset + j * 20);
+        });
+        yOffset += wrappedQuestion.length * 20;
+        wrappedUserAnswer.forEach((line, j) => {
+          ctx.fillText(line, width / 2, yOffset + j * 20);
+        });
+        yOffset += wrappedUserAnswer.length * 20;
+        wrappedCorrectAnswer.forEach((line, j) => {
+          ctx.fillText(line, width / 2, yOffset + j * 20);
+        });
+        yOffset += wrappedCorrectAnswer.length * 20 + 20;
+      }
+    }
+
+    if (!hasIncorrect) {
+      ctx.fillText("Chúc mừng! Bạn trả lời đúng hết!", width / 2, yOffset);
+      yOffset += 40; // Tăng yOffset để tạo khoảng trống cho nút Restart
+    }
+
+    // Vẽ nút Restart
+    drawNavButton(restartBtn, 'RESTART');
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = width / rect.width;
+  const scaleY = height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+  buttons.forEach(btn => {
+    btn.hover = x >= btn.x && x <= btn.x + btn.width && y >= btn.y && y <= btn.y + btn.height;
+  });
+  backBtn.hover = x >= backBtn.x && x <= backBtn.x + backBtn.width && y >= backBtn.y && y <= backBtn.y + backBtn.height;
+  nextBtn.hover = x >= nextBtn.x && x <= nextBtn.x + nextBtn.width && y >= nextBtn.y && y <= nextBtn.y + nextBtn.height;
+  restartBtn.hover = x >= restartBtn.x && x <= restartBtn.x + restartBtn.width && y >= restartBtn.y && y <= restartBtn.y + restartBtn.height;
+});
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = width / rect.width;
+  const scaleY = height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+
+  if (gameState === 'playing') {
+    buttons.forEach((btn, i) => {
+      if (x >= btn.x && x <= btn.x + btn.width && y >= btn.y && y <= btn.y + btn.height) {
+        selectedAnswer = i;
+        selectedOptionText = questions[currentQuestion].options[i];
+        answers[currentQuestion] = i;
+        gameState = 'feedback';
+        feedbackTimer = 60;
+        timerRunning = false;
+      }
+    });
+  }
+
+  if (x >= backBtn.x && x <= backBtn.x + backBtn.width && y >= backBtn.y && y <= backBtn.y + backBtn.height) {
+    if (currentQuestion > 0) {
+      currentQuestion--;
+      selectedAnswer = answers[currentQuestion];
+      selectedOptionText = selectedAnswer !== null ? questions[currentQuestion].options[selectedAnswer] : '';
+      timeLeft = 10;
+      timerRunning = true;
+      gameState = 'playing';
+    }
+  }
+
+  if (x >= nextBtn.x && x <= nextBtn.x + nextBtn.width && y >= nextBtn.y && y <= nextBtn.y + nextBtn.height) {
+    if (currentQuestion < questions.length - 1) {
+      currentQuestion++;
+      selectedAnswer = answers[currentQuestion];
+      selectedOptionText = selectedAnswer !== null ? questions[currentQuestion].options[selectedAnswer] : '';
+      timeLeft = 10;
+      timerRunning = true;
+      gameState = 'playing';
+    } else {
+      gameState = 'end';
+    }
+  }
+
+  // Xử lý sự kiện nhấn nút Restart
+  if (gameState === 'end' && x >= restartBtn.x && x <= restartBtn.x + restartBtn.width && y >= restartBtn.y && y <= restartBtn.y + restartBtn.height) {
+    resetGame(); // Reset game khi nhấn nút Restart
+  }
+});
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = width / rect.width;
+  const scaleY = height / rect.height;
+  const x = (touch.clientX - rect.left) * scaleX;
+  const y = (touch.clientY - rect.top) * scaleY;
+
+  if (gameState === 'playing') {
+    buttons.forEach((btn, i) => {
+      if (x >= btn.x && x <= btn.x + btn.width && y >= btn.y && y <= btn.y + btn.height) {
+        selectedAnswer = i;
+        selectedOptionText = questions[currentQuestion].options[i];
+        answers[currentQuestion] = i;
+        gameState = 'feedback';
+        feedbackTimer = 60;
+        timerRunning = false;
+      }
+    });
+  }
+
+  if (x >= backBtn.x && x <= backBtn.x + backBtn.width && y >= backBtn.y && y <= backBtn.y + backBtn.height) {
+    if (currentQuestion > 0) {
+      currentQuestion--;
+      selectedAnswer = answers[currentQuestion];
+      selectedOptionText = selectedAnswer !== null ? questions[currentQuestion].options[selectedAnswer] : '';
+      timeLeft = 10;
+      timerRunning = true;
+      gameState = 'playing';
+    }
+  }
+
+  if (x >= nextBtn.x && x <= nextBtn.x + nextBtn.width && y >= nextBtn.y && y <= nextBtn.y + nextBtn.height) {
+    if (currentQuestion < questions.length - 1) {
+      currentQuestion++;
+      selectedAnswer = answers[currentQuestion];
+      selectedOptionText = selectedAnswer !== null ? questions[currentQuestion].options[selectedAnswer] : '';
+      timeLeft = 10;
+      timerRunning = true;
+      gameState = 'playing';
+    } else {
+      gameState = 'end';
+    }
+  }
+
+  // Xử lý sự kiện nhấn nút Restart trên thiết bị cảm ứng
+  if (gameState === 'end' && x >= restartBtn.x && x <= restartBtn.x + restartBtn.width && y >= restartBtn.y && y <= restartBtn.y + restartBtn.height) {
+    resetGame(); // Reset game khi nhấn nút Restart
+  }
+});
+</script>
+</body>
+</html>
